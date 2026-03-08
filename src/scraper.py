@@ -1,74 +1,48 @@
 import time
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+import requests
 
-BASE_URL = "https://www.lausuntopalvelu.fi"
-
-KEYWORDS = [
-    "380/2023",
-    "laki työvoimapalveluiden järjestämisestä"
-]
+# Käyttäjäagentti headerit, jotta serveri ei blokkaa
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/112.0.0.0 Safari/537.36"
+}
 
 def get_lausunto_links():
-    # Headless Chrome setup
+    """Hakee kaikki lausuntojen linkit headless-Seleniumilla."""
     options = Options()
-    options.headless = True
+    options.add_argument("--headless")  # Pakollinen GitHub Actionsissa
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    
+    options.add_argument("--window-size=1920,1080")
+
     driver = webdriver.Chrome(options=options)
+    driver.get("https://www.lausuntopalvelu.fi/FI/AllLausuntoRequests")
+    time.sleep(2)  # Odotetaan sivun latautumista
 
-    driver.get(BASE_URL + "/FI/AllLausuntoRequests")
-    time.sleep(3)  # odota että sivu latautuu
-
-    links = set()
-    for a in driver.find_elements(By.TAG_NAME, "a"):
-        href = a.get_attribute("href")
-        if href and "/FI/Proposal/" in href:
-            links.add(href)
-
+    links = [a.get_attribute("href") for a in driver.find_elements("tag name", "a")]
     driver.quit()
-    return list(links)
-
+    return links
 
 def fetch_lausunto_text(url):
-    # Headless Chrome setup
-    options = Options()
-    options.headless = True
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-
-    driver = webdriver.Chrome(options=options)
-    driver.get(url)
-    time.sleep(3)  # odota että sivu latautuu
-
-    text = driver.find_element(By.TAG_NAME, "body").text
-
-    driver.quit()
-    return text
-
+    """Hakee lausunnon sisällön."""
+    r = requests.get(url, headers=HEADERS)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    return soup.get_text(separator=" ", strip=True)
 
 def find_relevant_lausunnot():
+    """Esimerkkifunktio: kerää lausunnot ja palauttaa listan dict-muodossa."""
     links = get_lausunto_links()
-    results = []
-
+    lausunnot = []
     for link in links:
-        text = fetch_lausunto_text(link)
-        for keyword in KEYWORDS:
-            if keyword.lower() in text.lower():
-                results.append({
-                    "url": link,
-                    "text": text[:5000]  # rajaa analyysi 5000 merkkiin
-                })
-                break
-
-    return results
-
-
-if __name__ == "__main__":
-    lausunnot = find_relevant_lausunnot()
-    for l in lausunnot:
-        print(l["url"])
+        try:
+            text = fetch_lausunto_text(link)
+            lausunnot.append({"url": link, "text": text})
+        except Exception as e:
+            print(f"Error fetching {link}: {e}")
+    return lausunnot
