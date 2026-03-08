@@ -1,54 +1,77 @@
+# src/scraper.py
 import requests
-import pdfplumber
-import io
+from bs4 import BeautifulSoup
 
-BASE_API = "https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc"
+BASE_URL = "https://www.lausuntopalvelu.fi"
 KEYWORDS = [
     "380/2023",
     "laki työvoimapalveluiden järjestämisestä"
 ]
 
-def fetch_all_proposals():
-    url = f"{BASE_API}/Proposals"
-    r = requests.get(url)
-    r.raise_for_status()
-    return r.json()
+def get_lausunto_links():
+    """
+    Hakee kaikki lausuntolinkit julkiselta listaukselta.
+    """
+    url = BASE_URL + "/FI/AllLausuntoRequests"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Lapa-Agent/1.0)"
+    }
 
-def fetch_proposal_pdf(pdf_url):
-    r = requests.get(pdf_url)
+    r = requests.get(url, headers=headers)
     r.raise_for_status()
-    with pdfplumber.open(io.BytesIO(r.content)) as pdf:
-        text = ""
-        for page in pdf.pages:
-            text += page.extract_text() or ""
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    links = []
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/FI/Proposal/" in href:
+            links.append(BASE_URL + href)
+
+    return list(set(links))
+
+
+def fetch_lausunto_text(url):
+    """
+    Hakee yksittäisen lausunnon tekstin.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Lapa-Agent/1.0)"
+    }
+
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    text = soup.get_text(separator=" ", strip=True)
+
     return text
 
+
 def find_relevant_lausunnot():
-    data = fetch_all_proposals()
+    """
+    Suodattaa lausunnot, joissa esiintyy KEYWORDS-listan avainsanat.
+    """
+    links = get_lausunto_links()
     results = []
 
-    for item in data:
-        title = item.get("Title", "")
-        description = item.get("Description", "")
-        text = f"{title}\n{description}"
+    for link in links:
+        text = fetch_lausunto_text(link)
 
-        # Tarkista avainsanat
         for keyword in KEYWORDS:
             if keyword.lower() in text.lower():
-                # Jos PDF-liite löytyy, hae teksti
-                pdf_url = item.get("PdfUrl")
-                if pdf_url:
-                    text += "\n" + fetch_proposal_pdf(pdf_url)
-
                 results.append({
-                    "url": item.get("Url", ""),
-                    "text": text[:5000]
+                    "url": link,
+                    "text": text[:5000]  # rajoitetaan pituus analyysiä varten
                 })
                 break
 
     return results
 
+
 if __name__ == "__main__":
+    # nopea testaus
     lausunnot = find_relevant_lausunnot()
     for l in lausunnot:
-        print(l["url"], "\n", l["text"][:200], "...\n")
+        print(l["url"])
+        print(l["text"][:200], "...\n")
