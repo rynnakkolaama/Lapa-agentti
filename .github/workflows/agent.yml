@@ -1,1 +1,43 @@
+name: Lausunto AI Agent
 
+on:
+  # Ajaa kerran viikossa, maanantaisin klo 06:00
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:  # Mahdollistaa manuaalisen ajon
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run agent
+        run: python src/main.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save processed list
+        run: |
+          git config --global user.name "AI Agent"
+          git config --global user.email "agent@example.com"
+          git add data/processed.json
+          git commit -m "update processed lausunnot" || echo "no changes"
+          git push
