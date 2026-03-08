@@ -28,6 +28,10 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Asennetaan headless Chrome ja Chromedriver
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
       - name: Run agent
         run: python src/main.py
         env:
