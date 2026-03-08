@@ -2,7 +2,7 @@ name: Lausunto AI Agent
 
 on:
   schedule:
-    - cron: "0 6 * * 1"  # Ajaa maanantaisin klo 06:00
+    - cron: "0 6 * * 1"  # maanantaisin klo 06:00
   workflow_dispatch:
 
 jobs:
@@ -27,18 +27,20 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Asennetaan Chrome ja ChromeDriver
-      - name: Install Chrome and ChromeDriver
+      - name: Install Chrome and matching ChromeDriver
         run: |
           sudo apt update
           sudo apt install -y wget unzip xvfb
           wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt install -y ./google-chrome-stable_current_amd64.deb
-          LATEST=$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
-          wget https://chromedriver.storage.googleapis.com/${LATEST}/chromedriver_linux64.zip
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Chrome version: $CHROME_VERSION"
+          CHROMEDRIVER_VERSION=$(wget -qO- "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+          echo "ChromeDriver version: $CHROMEDRIVER_VERSION"
+          wget "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
           unzip chromedriver_linux64.zip
           sudo mv chromedriver /usr/local/bin/
-          sudo chmod +x /usr/local/bin/chromedriver
+          sudo chmod +x /usr/local/bin/
 
       - name: Run agent
         run: python src/main.py
