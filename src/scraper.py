@@ -1,5 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 BASE_URL = "https://www.lausuntopalvelu.fi"
 
@@ -8,36 +10,45 @@ KEYWORDS = [
     "laki työvoimapalveluiden järjestämisestä"
 ]
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/115.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "fi-FI,fi;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Referer": "https://www.lausuntopalvelu.fi/"
-}
-
-
 def get_lausunto_links():
-    url = BASE_URL + "/FI/AllLausuntoRequests"
-    r = requests.get(url, headers=HEADERS)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    links = []
+    # Headless Chrome setup
+    options = Options()
+    options.headless = True
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    
+    driver = webdriver.Chrome(options=options)
 
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "/FI/Proposal/" in href:
-            links.append(BASE_URL + href)
+    driver.get(BASE_URL + "/FI/AllLausuntoRequests")
+    time.sleep(3)  # odota että sivu latautuu
 
-    return list(set(links))
+    links = set()
+    for a in driver.find_elements(By.TAG_NAME, "a"):
+        href = a.get_attribute("href")
+        if href and "/FI/Proposal/" in href:
+            links.add(href)
+
+    driver.quit()
+    return list(links)
 
 
 def fetch_lausunto_text(url):
-    r = requests.get(url, headers=HEADERS)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    return soup.get_text(separator=" ", strip=True)
+    # Headless Chrome setup
+    options = Options()
+    options.headless = True
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+
+    driver = webdriver.Chrome(options=options)
+    driver.get(url)
+    time.sleep(3)  # odota että sivu latautuu
+
+    text = driver.find_element(By.TAG_NAME, "body").text
+
+    driver.quit()
+    return text
 
 
 def find_relevant_lausunnot():
@@ -50,7 +61,7 @@ def find_relevant_lausunnot():
             if keyword.lower() in text.lower():
                 results.append({
                     "url": link,
-                    "text": text[:5000]
+                    "text": text[:5000]  # rajaa analyysi 5000 merkkiin
                 })
                 break
 
