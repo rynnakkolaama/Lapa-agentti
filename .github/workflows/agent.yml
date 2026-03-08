@@ -1,10 +1,9 @@
 name: Lausunto AI Agent
 
 on:
-  # Ajaa kerran viikossa, maanantaisin klo 06:00
   schedule:
-    - cron: "0 6 * * 1"
-  workflow_dispatch:  # Mahdollistaa manuaalisen ajon
+    - cron: "0 6 * * 1"  # Ajaa maanantaisin klo 06:00
+  workflow_dispatch:
 
 jobs:
   run-agent:
@@ -28,9 +27,18 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Asennetaan headless Chrome ja Chromedriver
-      - name: Setup Chrome
-        uses: browser-actions/setup-chrome@v1
+      # Asennetaan Chrome ja ChromeDriver
+      - name: Install Chrome and ChromeDriver
+        run: |
+          sudo apt update
+          sudo apt install -y wget unzip xvfb
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb
+          LATEST=$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
+          wget https://chromedriver.storage.googleapis.com/${LATEST}/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
 
       - name: Run agent
         run: python src/main.py
