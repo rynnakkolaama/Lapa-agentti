@@ -1,45 +1,48 @@
 import requests
-from bs4 import BeautifulSoup
+import pdfplumber
+import io
 
-BASE_URL = "https://www.lausuntopalvelu.fi"
-
+BASE_API = "https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc"
 KEYWORDS = [
     "380/2023",
     "laki työvoimapalveluiden järjestämisestä"
 ]
 
-def get_lausunto_links():
-    url = BASE_URL + "/FI/AllLausuntoRequests"
+def fetch_all_proposals():
+    url = f"{BASE_API}/Proposals"
     r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
+    r.raise_for_status()
+    return r.json()
 
-    links = []
-
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if "/FI/Proposal/" in href:
-            links.append(BASE_URL + href)
-
-    return list(set(links))
-
-def fetch_lausunto_text(url):
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
-    text = soup.get_text(separator=" ", strip=True)
+def fetch_proposal_pdf(pdf_url):
+    r = requests.get(pdf_url)
+    r.raise_for_status()
+    with pdfplumber.open(io.BytesIO(r.content)) as pdf:
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text() or ""
     return text
 
 def find_relevant_lausunnot():
-    links = get_lausunto_links()
+    data = fetch_all_proposals()
     results = []
 
-    for link in links:
-        text = fetch_lausunto_text(link)
+    for item in data:
+        title = item.get("Title", "")
+        description = item.get("Description", "")
+        text = f"{title}\n{description}"
 
+        # Tarkista avainsanat
         for keyword in KEYWORDS:
             if keyword.lower() in text.lower():
+                # Jos PDF-liite löytyy, hae teksti
+                pdf_url = item.get("PdfUrl")
+                if pdf_url:
+                    text += "\n" + fetch_proposal_pdf(pdf_url)
+
                 results.append({
-                    "url": link,
-                    "text": text[:5000]  # rajaa pitkä teksti analysointia varten
+                    "url": item.get("Url", ""),
+                    "text": text[:5000]
                 })
                 break
 
@@ -48,4 +51,4 @@ def find_relevant_lausunnot():
 if __name__ == "__main__":
     lausunnot = find_relevant_lausunnot()
     for l in lausunnot:
-        print(l)
+        print(l["url"], "\n", l["text"][:200], "...\n")
