@@ -3,22 +3,27 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.lausuntopalvelu.fi"
+
+# Avainsanat, joita etsitään
 KEYWORDS = [
     "380/2023",
     "laki työvoimapalveluiden järjestämisestä"
 ]
 
+# Käytetään User-Agentia, jotta palvelin ei blokkaa pyyntöjä
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/118.0.5993.90 Safari/537.36"
+}
+
 def get_lausunto_links():
     """
-    Hakee kaikki lausuntolinkit julkiselta listaukselta.
+    Hakee kaikki lausuntopyyntöjen linkit AllLausuntoRequests-sivulta.
     """
     url = BASE_URL + "/FI/AllLausuntoRequests"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; Lapa-Agent/1.0)"
-    }
-
-    r = requests.get(url, headers=headers)
-    r.raise_for_status()
+    r = requests.get(url, headers=HEADERS)
+    r.raise_for_status()  # nostaa poikkeuksen, jos ei 200 OK
 
     soup = BeautifulSoup(r.text, "html.parser")
     links = []
@@ -33,36 +38,35 @@ def get_lausunto_links():
 
 def fetch_lausunto_text(url):
     """
-    Hakee yksittäisen lausunnon tekstin.
+    Hakee yksittäisen lausuntosivun tekstin analysoitavaksi.
     """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; Lapa-Agent/1.0)"
-    }
-
-    r = requests.get(url, headers=headers)
+    r = requests.get(url, headers=HEADERS)
     r.raise_for_status()
-
     soup = BeautifulSoup(r.text, "html.parser")
     text = soup.get_text(separator=" ", strip=True)
-
     return text
 
 
 def find_relevant_lausunnot():
     """
-    Suodattaa lausunnot, joissa esiintyy KEYWORDS-listan avainsanat.
+    Hakee kaikki lausunnot, jotka sisältävät KEYWORDS-listan avainsanoja.
+    Palauttaa listan dictejä: {"url": ..., "text": ...}
     """
     links = get_lausunto_links()
     results = []
 
     for link in links:
-        text = fetch_lausunto_text(link)
+        try:
+            text = fetch_lausunto_text(link)
+        except requests.HTTPError as e:
+            print(f"Virhe haettaessa {link}: {e}")
+            continue
 
         for keyword in KEYWORDS:
             if keyword.lower() in text.lower():
                 results.append({
                     "url": link,
-                    "text": text[:5000]  # rajoitetaan pituus analyysiä varten
+                    "text": text[:5000]  # rajataan analysoitava osuus
                 })
                 break
 
@@ -70,8 +74,6 @@ def find_relevant_lausunnot():
 
 
 if __name__ == "__main__":
-    # nopea testaus
     lausunnot = find_relevant_lausunnot()
     for l in lausunnot:
-        print(l["url"])
-        print(l["text"][:200], "...\n")
+        print(f"{l['url']}\n{l['text'][:200]}...\n")
